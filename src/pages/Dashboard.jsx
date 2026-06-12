@@ -50,7 +50,7 @@ export default function Dashboard() {
   }, [isAdmin]);
 
   const expireOldBans = async () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA");
     await supabase
       .from("bans")
       .update({ is_active: false })
@@ -152,7 +152,7 @@ export default function Dashboard() {
   const handleIssueBan = async ({ guestId, offenseIds, banDays, notes }) => {
     const { data: { user } } = await supabase.auth.getUser();
     
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA"); // Returns YYYY-MM-DD in local time
     const expiryDate = new Date(today);
     expiryDate.setDate(expiryDate.getDate() + banDays);
     const expiryDateStr = expiryDate.toISOString().split("T")[0];
