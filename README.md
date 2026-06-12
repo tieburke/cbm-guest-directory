@@ -1,6 +1,6 @@
 # CBM Guest Directory
 
-A full-stack web application built for a homeless shelter to manage guest records, track check-ins, and enforce a structured ban system. Developed as a real-world project during my first year of college as a Computer Engineering student.
+A full-stack web application built for a homeless shelter to manage guest records, track check-ins, and enforce a structured ban system. Developed as a real-world project after my first year of college.
 
 ## Overview
 
