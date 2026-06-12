@@ -151,7 +151,9 @@ export default function Dashboard() {
 
   const handleIssueBan = async ({ guestId, offenseIds, banDays, notes }) => {
     const { data: { user } } = await supabase.auth.getUser();
-    const expiryDate = new Date();
+    
+    const today = new Date().toISOString().split("T")[0];
+    const expiryDate = new Date(today);
     expiryDate.setDate(expiryDate.getDate() + banDays);
     const expiryDateStr = expiryDate.toISOString().split("T")[0];
 
@@ -160,7 +162,7 @@ export default function Dashboard() {
       .insert({
         guest_id: guestId,
         issued_by: user.id,
-        issued_date: new Date().toISOString().split("T")[0],
+        issued_date: today,
         expiry_date: expiryDateStr,
         is_active: true,
         notes: notes || null,
