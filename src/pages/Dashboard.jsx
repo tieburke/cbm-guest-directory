@@ -55,7 +55,7 @@ export default function Dashboard() {
       .from("bans")
       .update({ is_active: false })
       .eq("is_active", true)
-      .lt("expiry_date", today);
+      .lte("expiry_date", today);
   };
 
   const fetchBans = async () => {
