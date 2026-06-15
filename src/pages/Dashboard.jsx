@@ -45,8 +45,7 @@ export default function Dashboard() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (isAdmin) setActiveTab("demographics");
-    else setActiveTab("guests");
+    setActiveTab("checkins");
   }, [isAdmin]);
 
   const expireOldBans = async () => {
@@ -211,10 +210,10 @@ export default function Dashboard() {
   };
 
   const tabs = [
+    { id: "checkins", label: "Check-ins" },
     ...(isAdmin ? [{ id: "demographics", label: "Demographics" }] : []),
     { id: "guests", label: "Guests" },
     { id: "bans", label: "Bans" },
-    { id: "checkins", label: "Check-ins" },
     ...(isAdmin ? [{ id: "staff", label: "Staff" }] : []),
   ];
 
@@ -354,125 +353,125 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Check-ins tab */}
-        {activeTab === "checkins" && (
-        <div>
-          {checkInsLoading ? (
-            <p className="text-gray-500 text-sm">Loading check-ins...</p>
-          ) : (
-            <div className="flex flex-col gap-8">
-              <div className="flex justify-between items-center">
-                <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
-                  {[
-                    { value: "day", label: "Today" },
-                    { value: "week", label: "This Week" },
-                    { value: "month", label: "This Month" },
-                    { value: "year", label: "This Year" },
-                    { value: "all", label: "All Time" },
-                  ].map((option) => (
+          {/* Check-ins tab */}
+          {activeTab === "checkins" && (
+          <div>
+            {checkInsLoading ? (
+              <p className="text-gray-500 text-sm">Loading check-ins...</p>
+            ) : (
+              <div className="flex flex-col gap-8">
+                <div className="flex justify-between items-center">
+                  <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+                    {[
+                      { value: "day", label: "Today" },
+                      { value: "week", label: "This Week" },
+                      { value: "month", label: "This Month" },
+                      { value: "year", label: "This Year" },
+                      { value: "all", label: "All Time" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setCheckInFilter(option.value);
+                          fetchCheckIns(option.value);
+                        }}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                          checkInFilter === option.value
+                            ? "bg-gray-600 text-white"
+                            : "text-gray-400 hover:text-white"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-gray-400 text-sm">{checkIns.length} check-ins</p>
                     <button
-                      key={option.value}
-                      onClick={() => {
-                        setCheckInFilter(option.value);
-                        fetchCheckIns(option.value);
-                      }}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
-                        checkInFilter === option.value
-                          ? "bg-gray-600 text-white"
-                          : "text-gray-400 hover:text-white"
-                      }`}
+                      onClick={exportCheckIns}
+                      className="bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-600 transition"
                     >
-                      {option.label}
+                      Export
                     </button>
-                  ))}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <p className="text-gray-400 text-sm">{checkIns.length} check-ins</p>
-                  <button
-                    onClick={exportCheckIns}
-                    className="bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-600 transition"
-                  >
-                    Export
-                  </button>
-                </div>
-              </div>
 
-              {checkIns.length === 0 ? (
-                <p className="text-gray-400 text-sm">No check-ins in this period.</p>
-              ) : (
-                <div className="flex flex-col gap-8">
-                  {Object.entries(
-                    checkIns.reduce((acc, ci) => {
-                      const eventName = ci.event?.name ?? "Unknown Event";
-                      if (!acc[eventName]) acc[eventName] = [];
-                      acc[eventName].push(ci);
-                      return acc;
-                    }, {})
-                  ).map(([eventName, eventCheckIns]) => (
-                    <div key={eventName}>
-                      <h2 className="text-lg font-semibold text-white mb-4">{eventName}</h2>
-                      <div className="flex flex-col gap-4">
-                        {Object.entries(
-                          eventCheckIns.reduce((acc, ci) => {
-                            const date = new Date(ci.checked_in_at).toLocaleDateString("en-US", {
-                              weekday: "long",
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            });
-                            if (!acc[date]) acc[date] = [];
-                            acc[date].push(ci);
-                            return acc;
-                          }, {})
-                        ).map(([date, dayCheckIns]) => (
-                          <div key={date} className="bg-gray-800 rounded-lg p-4">
-                            <div className="flex justify-between items-center mb-3">
-                              <p className="text-sm font-medium text-gray-300">{date}</p>
-                              <span className="text-xs bg-gray-700 text-gray-400 px-2 py-1 rounded-full">
-                                {dayCheckIns.length} {dayCheckIns.length === 1 ? "guest" : "guests"}
-                              </span>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              {dayCheckIns.map((ci) => {
-                                const name = [ci.guest?.first_name, ci.guest?.last_name]
-                                  .filter(Boolean).join(" ") || "Unknown Guest";
-                                const time = new Date(ci.checked_in_at).toLocaleTimeString("en-US", {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                });
-                                return (
-                                  <div key={ci.id} className="flex justify-between items-center py-2 border-b border-gray-700 last:border-0">
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                        {ci.guest?.photo_url ? (
-                                          <img src={ci.guest.photo_url} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                          <span className="text-gray-500 text-xs">?</span>
-                                        )}
+                {checkIns.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No check-ins in this period.</p>
+                ) : (
+                  <div className="flex flex-col gap-8">
+                    {Object.entries(
+                      checkIns.reduce((acc, ci) => {
+                        const eventName = ci.event?.name ?? "Unknown Event";
+                        if (!acc[eventName]) acc[eventName] = [];
+                        acc[eventName].push(ci);
+                        return acc;
+                      }, {})
+                    ).map(([eventName, eventCheckIns]) => (
+                      <div key={eventName}>
+                        <h2 className="text-lg font-semibold text-white mb-4">{eventName}</h2>
+                        <div className="flex flex-col gap-4">
+                          {Object.entries(
+                            eventCheckIns.reduce((acc, ci) => {
+                              const date = new Date(ci.checked_in_at).toLocaleDateString("en-US", {
+                                weekday: "long",
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              });
+                              if (!acc[date]) acc[date] = [];
+                              acc[date].push(ci);
+                              return acc;
+                            }, {})
+                          ).map(([date, dayCheckIns]) => (
+                            <div key={date} className="bg-gray-800 rounded-lg p-4">
+                              <div className="flex justify-between items-center mb-3">
+                                <p className="text-sm font-medium text-gray-300">{date}</p>
+                                <span className="text-xs bg-gray-700 text-gray-400 px-2 py-1 rounded-full">
+                                  {dayCheckIns.length} {dayCheckIns.length === 1 ? "guest" : "guests"}
+                                </span>
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                {dayCheckIns.map((ci) => {
+                                  const name = [ci.guest?.first_name, ci.guest?.last_name]
+                                    .filter(Boolean).join(" ") || "Unknown Guest";
+                                  const time = new Date(ci.checked_in_at).toLocaleTimeString("en-US", {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  });
+                                  return (
+                                    <div key={ci.id} className="flex justify-between items-center py-2 border-b border-gray-700 last:border-0">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                          {ci.guest?.photo_url ? (
+                                            <img src={ci.guest.photo_url} alt="" className="w-full h-full object-cover" />
+                                          ) : (
+                                            <span className="text-gray-500 text-xs">?</span>
+                                          )}
+                                        </div>
+                                        <span className="text-gray-200 text-sm">{name}</span>
                                       </div>
-                                      <span className="text-gray-200 text-sm">{name}</span>
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-gray-500 text-xs">{time}</span>
+                                        <span className="text-gray-500 text-xs">
+                                          by {ci.staff?.first_name} {ci.staff?.last_name}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-gray-500 text-xs">{time}</span>
-                                      <span className="text-gray-500 text-xs">
-                                        by {ci.staff?.first_name} {ci.staff?.last_name}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Demographics tab */}
         {activeTab === "demographics" && (
