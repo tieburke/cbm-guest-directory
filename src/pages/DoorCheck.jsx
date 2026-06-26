@@ -23,6 +23,13 @@ export default function DoorCheck() {
     fetchAllGuests();
   }, [selectedEvent]);
 
+  const getTodayRange = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    return { start: start.toISOString(), end: end.toISOString() };
+  };
+
   const fetchEvents = async () => {
     const { data } = await supabase
       .from("events")
@@ -51,6 +58,7 @@ export default function DoorCheck() {
     }
 
     const guestIds = matchedGuests.map((g) => g.id);
+    const { start, end } = getTodayRange();
     const [{ data: banData }, { data: checkInData }] = await Promise.all([
       supabase
         .from("bans")
@@ -61,8 +69,8 @@ export default function DoorCheck() {
         .from("check_ins")
         .select("guest_id")
         .eq("event_id", selectedEvent.id)
-        .gte("checked_in_at", `${new Date().toISOString().split("T")[0]}T00:00:00.000Z`)
-        .lt("checked_in_at", `${new Date().toISOString().split("T")[0]}T23:59:59.999Z`)
+        .gte("checked_in_at", start)
+        .lt("checked_in_at", end)
         .in("guest_id", guestIds),
     ]);
 
@@ -71,14 +79,11 @@ export default function DoorCheck() {
 
     const visibleGuests = matchedGuests
       .filter((g) => !bannedIds.has(g.id))
-      .map((g) => ({ ...g, isCheckedIn: checkedInIds.has(g.id) }))
+      .map((g) => ({ ...g }))
       .sort((a, b) => {
-        if (a.isCheckedIn === b.isCheckedIn) {
-          const nameA = [a.first_name, a.last_name].filter(Boolean).join(" ");
-          const nameB = [b.first_name, b.last_name].filter(Boolean).join(" ");
-          return nameA.localeCompare(nameB);
-        }
-        return b.isCheckedIn - a.isCheckedIn;
+        const nameA = [a.first_name, a.last_name].filter(Boolean).join(" ");
+        const nameB = [b.first_name, b.last_name].filter(Boolean).join(" ");
+        return nameA.localeCompare(nameB);
       });
 
     setGuests(visibleGuests);
@@ -121,14 +126,10 @@ export default function DoorCheck() {
       .map((g) => ({
         ...g,
         isBanned: bannedIds.has(g.id),
-        isCheckedIn: checkedInIds.has(g.id),
       }))
       .sort((a, b) => {
         if (a.isBanned !== b.isBanned) {
           return b.isBanned - a.isBanned;
-        }
-        if (a.isCheckedIn !== b.isCheckedIn) {
-          return b.isCheckedIn - a.isCheckedIn;
         }
         const nameA = [a.first_name, a.last_name].filter(Boolean).join(" ");
         const nameB = [b.first_name, b.last_name].filter(Boolean).join(" ");
@@ -154,6 +155,7 @@ export default function DoorCheck() {
       .eq("is_active", true)
       .lt("expiry_date", today);
 
+    const { start, end } = getTodayRange();
     const [{ data: banData }, { data: checkInData }] = await Promise.all([
       supabase
         .from("bans")
@@ -170,8 +172,8 @@ export default function DoorCheck() {
         .select("id")
         .eq("guest_id", guest.id)
         .eq("event_id", selectedEvent.id)
-        .gte("checked_in_at", `${today}T00:00:00.000Z`)
-        .lt("checked_in_at", `${today}T23:59:59.999Z`)
+        .gte("checked_in_at", start)
+        .lt("checked_in_at", end)
         .limit(1),
     ]);
 
@@ -199,6 +201,9 @@ export default function DoorCheck() {
 
     setCheckingIn(false);
     setCheckedIn(true);
+    setAlreadyCheckedIn(true);
+    setAllGuests((prev) => prev.map((g) => g.id === selected.id ? { ...g, isCheckedIn: true } : g));
+    setGuests((prev) => prev.map((g) => g.id === selected.id ? { ...g, isCheckedIn: true } : g));
   };
 
   const guestName = selected
@@ -300,11 +305,6 @@ export default function DoorCheck() {
                     {g.isBanned && (
                       <span className="absolute top-3 right-3 rounded-full bg-red-600 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white shadow-lg">
                         Banned
-                      </span>
-                    )}
-                    {!g.isBanned && g.isCheckedIn && (
-                      <span className="absolute top-3 right-3 rounded-full bg-green-600 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white shadow-lg">
-                        Checked-in
                       </span>
                     )}
                   </div>
