@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
@@ -8,6 +8,15 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const role = session?.user?.user_metadata?.role ?? "staff";
+      if (session?.user) {
+        navigate(role === "admin" ? "/dashboard" : "/door-check", { replace: true });
+      }
+    });
+  }, [navigate]);
 
   const handleLogin = async () => {
     setLoading(true);
@@ -24,7 +33,8 @@ export default function Login() {
         console.error("Login error:", error.message);
         setError("Invalid email or password.");
     } else {
-        navigate("/dashboard");
+        const role = data.user?.user_metadata?.role ?? "staff";
+        navigate(role === "admin" ? "/dashboard" : "/door-check");
     }
 
     setLoading(false);

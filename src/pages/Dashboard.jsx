@@ -360,30 +360,26 @@ export default function Dashboard() {
               <p className="text-gray-500 text-sm">Loading check-ins...</p>
             ) : (
               <div className="flex flex-col gap-8">
-                <div className="flex justify-between items-center">
-                  <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
-                    {[
-                      { value: "day", label: "Today" },
-                      { value: "week", label: "This Week" },
-                      { value: "month", label: "This Month" },
-                      { value: "year", label: "This Year" },
-                      { value: "all", label: "All Time" },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setCheckInFilter(option.value);
-                          fetchCheckIns(option.value);
-                        }}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
-                          checkInFilter === option.value
-                            ? "bg-gray-600 text-white"
-                            : "text-gray-400 hover:text-white"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+                <div className="flex justify-between items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="checkin-filter" className="text-sm font-medium text-gray-400">
+                      Show:
+                    </label>
+                    <select
+                      id="checkin-filter"
+                      value={checkInFilter}
+                      onChange={(e) => {
+                        setCheckInFilter(e.target.value);
+                        fetchCheckIns(e.target.value);
+                      }}
+                      className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+                    >
+                      <option value="day">Today</option>
+                      <option value="week">This Week</option>
+                      <option value="month">This Month</option>
+                      <option value="year">This Year</option>
+                      <option value="all">All Time</option>
+                    </select>
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="text-gray-400 text-sm">{checkIns.length} check-ins</p>
