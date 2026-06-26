@@ -39,7 +39,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (activeTab === "demographics" && !demographics) fetchDemographics();
-    if (activeTab === "guests" && allGuests.length === 0) fetchAllGuests();
+    if (activeTab === "guests") fetchAllGuests();
     if (activeTab === "checkins") fetchCheckIns(checkInFilter);
     if (activeTab === "staff") fetchStaff();
   }, [activeTab]);

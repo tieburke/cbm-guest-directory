@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import { data, Link, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import LiftBanModal from "../components/LiftBanModal";
 import { useUserRole } from "../hooks/useUserRole";
+import { useNavigate } from "react-router-dom";
 
 const GENDER_OPTIONS = ["Male", "Female", "No single gender", "Questioning", "Transgender", "Client doesn't know / refused"];
 const RACE_OPTIONS = ["American Indian or Alaska Native", "Asian or Asian American", "Black, African American, or African", "Hispanic/Latina/e/o", "Middle Eastern or North African", "Native Hawaiian or Pacific Islander", "White", "Multiracial", "Client doesn't know"];
@@ -52,14 +53,23 @@ export default function GuestProfile() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showLiftModal, setShowLiftModal] = useState(false);
   const [liftedBanId, setLiftedBanId] = useState(null);
   const [liftNotes, setLiftNotes] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchGuest();
     fetchBans();
   }, [id]);
+
+  // Expose supabase on window in dev for easy console debugging
+  useEffect(() => {
+    if (import.meta.env && import.meta.env.DEV) {
+      try { window.supabase = supabase; } catch (e) { /* ignore */ }
+    }
+  }, []);
 
   const fetchGuest = async () => {
     const { data, error } = await supabase
@@ -115,6 +125,34 @@ export default function GuestProfile() {
     if (error) { console.error("Error saving guest:", error.message); }
     else { await fetchGuest(); setEditing(false); }
     setSaving(false);
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    console.log("Deleting guest id:", id);
+    const { data, error } = await supabase
+      .from("guests")
+      .delete()
+      .eq("id", id)
+      .select();
+
+    if (error) {
+      console.error("Error deleting guest:", error);
+      alert("Delete failed: " + (error.message || JSON.stringify(error)));
+      setDeleting(false);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      console.error("Delete did not remove any rows:", data);
+      alert("Delete did not remove any rows. Confirm the guest ID and permissions.");
+      setDeleting(false);
+      return;
+    }
+
+    // success
+    setDeleting(false);
+    navigate("/dashboard");
   };
 
   const handlePhotoUpload = async (e) => {
@@ -202,12 +240,21 @@ export default function GuestProfile() {
             ← Back to dashboard
           </Link>
           {!editing && (
-            <button
-              onClick={() => setEditing(true)}
-              className="bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-600 transition"
-            >
-              Edit Profile
-            </button>
+            <div className="flex gap-2">  
+              <button
+                onClick={() => setEditing(true)}
+                className="bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-600 transition"
+              >
+                Edit Profile
+              </button>
+              <button
+                onClick={() => handleDelete()}
+                disabled={deleting}
+                className="bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-red-700 transition"
+              >
+                {deleting ? "Deleting..." : "Delete Guest"}
+              </button>
+            </div>
           )}
           {editing && (
             <div className="flex gap-2">
