@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import LiftBanModal from "../components/LiftBanModal";
 import { useUserRole } from "../hooks/useUserRole";
 import { useNavigate } from "react-router-dom";
+import { resizeImage } from "../utils/resizeImage";
 
 const GENDER_OPTIONS = ["Male", "Female", "No single gender", "Questioning", "Transgender", "Client doesn't know / refused"];
 const RACE_OPTIONS = ["American Indian or Alaska Native", "Asian or Asian American", "Black, African American, or African", "Hispanic/Latina/e/o", "Middle Eastern or North African", "Native Hawaiian or Pacific Islander", "White", "Multiracial", "Client doesn't know"];
@@ -57,11 +58,47 @@ export default function GuestProfile() {
   const [showLiftModal, setShowLiftModal] = useState(false);
   const [liftedBanId, setLiftedBanId] = useState(null);
   const [liftNotes, setLiftNotes] = useState("");
+  const [dailyBreadChecking, setDailyBreadChecking] = useState(false);
+  const [dailyBreadCheckedIn, setDailyBreadCheckedIn] = useState(false);
+  const [dailyBreadMessage, setDailyBreadMessage] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchGuest();
     fetchBans();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const checkDailyBreadStatus = async () => {
+      const { data: eventData } = await supabase
+        .from("events")
+        .select("id")
+        .eq("is_active", true)
+        .ilike("name", "%daily bread%")
+        .maybeSingle();
+
+      if (!eventData?.id) return;
+
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+
+      const { data, error } = await supabase
+        .from("check_ins")
+        .select("id")
+        .eq("guest_id", id)
+        .eq("event_id", eventData.id)
+        .gte("checked_in_at", start)
+        .lt("checked_in_at", end)
+        .limit(1);
+
+      if (!error && (data || []).length > 0) {
+        setDailyBreadCheckedIn(true);
+      }
+    };
+
+    checkDailyBreadStatus();
   }, [id]);
 
   // Expose supabase on window in dev for easy console debugging
@@ -128,8 +165,73 @@ export default function GuestProfile() {
   };
 
   const handleDelete = async () => {
+    if (!window.confirm(`Permanently delete ${guestName}? This will also delete ALL their bans and check-in history. This cannot be undone.`)) {
+      return;
+    }
+
     setDeleting(true);
     console.log("Deleting guest id:", id);
+
+    // 1. Get this guest's ban ids first, so we can delete ban_offenses tied to them
+    const { data: guestBans, error: banFetchError } = await supabase
+      .from("bans")
+      .select("id")
+      .eq("guest_id", id);
+
+    if (banFetchError) {
+      console.error("Error fetching bans for guest:", banFetchError);
+      alert("Delete failed: " + banFetchError.message);
+      setDeleting(false);
+      return;
+    }
+
+    const banIds = (guestBans || []).map((b) => b.id);
+
+    // 2. Delete ban_offenses for those bans
+    if (banIds.length > 0) {
+      const { error: boError } = await supabase
+        .from("ban_offenses")
+        .delete()
+        .in("ban_id", banIds);
+
+      if (boError) {
+        console.error("Error deleting ban_offenses:", boError);
+        alert("Delete failed: " + boError.message);
+        setDeleting(false);
+        return;
+      }
+    }
+
+    // 3. Delete bans
+    const { error: bansError } = await supabase
+      .from("bans")
+      .delete()
+      .eq("guest_id", id);
+
+    if (bansError) {
+      console.error("Error deleting bans:", bansError);
+      alert("Delete failed: " + bansError.message);
+      setDeleting(false);
+      return;
+    }
+
+    // 4. Delete check-ins
+    const { data: deletedCheckIns, error: checkInsError } = await supabase
+      .from("check_ins")
+      .delete()
+      .eq("guest_id", id)
+      .select();
+
+    if (checkInsError) {
+      console.error("Error deleting check_ins:", checkInsError);
+      alert("Delete failed: " + checkInsError.message);
+      setDeleting(false);
+      return;
+    }
+
+    console.log(`Deleted ${deletedCheckIns?.length ?? 0} check_ins`);
+
+    // 5. Finally delete the guest
     const { data, error } = await supabase
       .from("guests")
       .delete()
@@ -155,16 +257,99 @@ export default function GuestProfile() {
     navigate("/dashboard");
   };
 
+  const handleDailyBreadCheckIn = async () => {
+    setDailyBreadChecking(true);
+    setDailyBreadMessage("");
+
+    const { data: eventData, error: eventError } = await supabase
+      .from("events")
+      .select("id")
+      .eq("is_active", true)
+      .ilike("name", "%daily bread%")
+      .maybeSingle();
+
+    if (eventError || !eventData?.id) {
+      console.error("Error finding Daily Bread event:", eventError);
+      setDailyBreadMessage("Daily Bread event was not found.");
+      setDailyBreadChecking(false);
+      return;
+    }
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+
+    const { data: existingCheckIn, error: checkInLookupError } = await supabase
+      .from("check_ins")
+      .select("id")
+      .eq("guest_id", id)
+      .eq("event_id", eventData.id)
+      .gte("checked_in_at", start)
+      .lt("checked_in_at", end)
+      .limit(1);
+
+    if (checkInLookupError) {
+      console.error("Error checking existing Daily Bread check-in:", checkInLookupError);
+      setDailyBreadMessage("Could not verify today's check-in status.");
+      setDailyBreadChecking(false);
+      return;
+    }
+
+    if ((existingCheckIn || []).length > 0) {
+      setDailyBreadCheckedIn(true);
+      setDailyBreadMessage("Already checked in for Daily Bread today.");
+      setDailyBreadChecking(false);
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { error: insertError } = await supabase.from("check_ins").insert({
+      guest_id: id,
+      staff_id: user.id,
+      event_id: eventData.id,
+      checked_in_at: new Date().toISOString(),
+    });
+
+    if (insertError) {
+      console.error("Error checking in guest for Daily Bread:", insertError);
+      setDailyBreadMessage("Check-in failed. Please try again.");
+      setDailyBreadChecking(false);
+      return;
+    }
+
+    await supabase.from("audit_log").insert({
+      staff_id: user.id,
+      action: "checked_in",
+      target_type: "guest",
+      target_id: id,
+    });
+
+    setDailyBreadCheckedIn(true);
+    setDailyBreadMessage("Checked in for Daily Bread today.");
+    setDailyBreadChecking(false);
+  };
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const fileExt = file.name.split(".").pop();
-    const filePath = `${id}.${fileExt}`;
+    let fileToUpload = file;
+    try {
+      fileToUpload = await resizeImage(file);
+    } catch (resizeErr) {
+      console.error("Resize failed, uploading original:", resizeErr);
+    }
+
+    const filePath = `${id}.jpg`;
 
     const { error: uploadError } = await supabase.storage
       .from("guest-photos")
-      .upload(filePath, file, { upsert: true });
+      .upload(filePath, fileToUpload, {
+        upsert: true,
+        contentType: "image/jpeg",
+        cacheControl: "31536000",
+      });
 
     if (uploadError) { console.error("Error uploading photo:", uploadError.message); return; }
 
@@ -433,6 +618,33 @@ export default function GuestProfile() {
                 );
               })}
             </div>
+          )}
+        </div>
+
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">Daily Bread</h2>
+          <p className="text-sm text-gray-300 mb-4">
+            Check this guest in for today&apos;s Daily Bread service.
+          </p>
+          <button
+            onClick={handleDailyBreadCheckIn}
+            disabled={dailyBreadChecking || dailyBreadCheckedIn}
+            className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition ${
+              dailyBreadCheckedIn
+                ? "bg-gray-700 text-white cursor-default"
+                : "bg-green-700 text-white hover:bg-green-600"
+            }`}
+          >
+            {dailyBreadChecking
+              ? "Checking in..."
+              : dailyBreadCheckedIn
+                ? "Checked in for today"
+                : "Check in to Daily Bread"}
+          </button>
+          {dailyBreadMessage && (
+            <p className={`text-sm mt-3 ${dailyBreadCheckedIn ? "text-green-400" : "text-red-400"}`}>
+              {dailyBreadMessage}
+            </p>
           )}
         </div>
 

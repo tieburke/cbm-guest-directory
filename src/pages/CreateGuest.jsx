@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { resizeImage } from "../utils/resizeImage";
 
 const GENDER_OPTIONS = ["Male", "Female", "No single gender", "Questioning", "Transgender", "Client doesn't know / refused"];
 const RACE_OPTIONS = ["American Indian or Alaska Native", "Asian or Asian American", "Black, African American, or African", "Hispanic/Latina/e/o", "Middle Eastern or North African", "Native Hawaiian or Pacific Islander", "White", "Multiracial", "Client doesn't know"];
@@ -59,12 +60,18 @@ export default function CreateGuest() {
 
     // Upload photo if one was selected
     if (photoFile) {
-      const fileExt = photoFile.name.split(".").pop();
-      const filePath = `${data.id}.${fileExt}`;
+      let fileToUpload = photoFile;
+      try {
+        fileToUpload = await resizeImage(photoFile);
+      } catch (resizeErr) {
+        console.error("Resize failed, uploading original:", resizeErr);
+      }
+
+      const filePath = `${data.id}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("guest-photos")
-        .upload(filePath, photoFile, { upsert: true });
+        .upload(filePath, fileToUpload, { upsert: true, contentType: "image/jpeg" });
 
       if (!uploadError) {
         const { data: urlData } = supabase.storage
