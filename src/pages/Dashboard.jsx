@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import BanCard from "../components/BanCard";
 import IssueBanModal from "../components/IssueBanModal";
+import IssueReportModal from "../components/IssueReportModal";
 import { useUserRole } from "../hooks/useUserRole";
 import { downloadCSV } from "../utils/exportCSV";
 import StaffCreateForm from "../components/StaffCreateForm";
+import { applyGuestNameSearch, rankGuestsBySimilarity } from "../utils/searchGuests";
 
 export default function Dashboard() {
   const { isAdmin } = useUserRole();
@@ -16,6 +18,7 @@ export default function Dashboard() {
   const [banSearch, setBanSearch] = useState("");
   const [banFilter, setBanFilter] = useState("active");
   const [showModal, setShowModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const [guestSearch, setGuestSearch] = useState("");
   const [guests, setGuests] = useState([]);
@@ -76,15 +79,14 @@ export default function Dashboard() {
   };
 
   const fetchGuests = async (value) => {
-    if (value.length < 2) { setGuests([]); return; }
+    if (value.trim().length < 2) { setGuests([]); return; }
     setGuestsLoading(true);
-    const { data } = await supabase
+    const baseQuery = supabase
       .from("guests")
       .select("*")
-      .or(`first_name.ilike.%${value}%,last_name.ilike.%${value}%,alias.ilike.%${value}%`)
-      .order("first_name")
       .limit(20);
-    setGuests(data || []);
+    const { data } = await applyGuestNameSearch(baseQuery, value);
+    setGuests(rankGuestsBySimilarity(data || [], value));
     setGuestsLoading(false);
   };
 
@@ -183,6 +185,29 @@ export default function Dashboard() {
     });
 
     fetchBans();
+  };
+
+  const handleIssueReport = async ({ guestId, note }) => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: report, error: reportError } = await supabase
+      .from("guest_reports")
+      .insert({
+        guest_id: guestId,
+        staff_id: user.id,
+        note,
+      })
+      .select()
+      .single();
+
+    if (reportError) { console.error("Error creating report:", reportError.message); return; }
+
+    await supabase.from("audit_log").insert({
+      staff_id: user.id,
+      action: "created_report",
+      target_type: "guest_report",
+      target_id: report.id,
+    });
   };
 
   const visibleBans = bans
@@ -350,6 +375,12 @@ export default function Dashboard() {
             className="bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-red-700 transition"
           >
             + New Ban
+          </button>
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="bg-yellow-400 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-yellow-500 transition"
+          >
+            + New Report
           </button>
         </div>
 
@@ -648,6 +679,13 @@ export default function Dashboard() {
         <IssueBanModal
           onClose={() => setShowModal(false)}
           onSubmit={handleIssueBan}
+        />
+      )}
+
+      {showReportModal && (
+        <IssueReportModal
+          onClose={() => setShowReportModal(false)}
+          onSubmit={handleIssueReport}
         />
       )}
 

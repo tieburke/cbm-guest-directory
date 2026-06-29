@@ -13,6 +13,7 @@ export default function CreateGuest() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fromDoorCheck = searchParams.get("from") === "doorcheck";
+  const eventId = searchParams.get("eventId");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [photoFile, setPhotoFile] = useState(null);
@@ -82,6 +83,30 @@ export default function CreateGuest() {
           .from("guests")
           .update({ photo_url: urlData.publicUrl })
           .eq("id", data.id);
+      }
+    }
+
+    // If created from Door Check with an active event selected, check the new guest
+    // in to that event immediately — staff shouldn't have to search for them again.
+    if (fromDoorCheck && eventId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { error: checkInError } = await supabase.from("check_ins").insert({
+          guest_id: data.id,
+          staff_id: user.id,
+          event_id: eventId,
+          checked_in_at: new Date().toISOString(),
+        });
+        if (checkInError) {
+          console.error("Error auto-checking-in new guest:", checkInError.message);
+        } else {
+          await supabase.from("audit_log").insert({
+            staff_id: user.id,
+            action: "checked_in",
+            target_type: "guest",
+            target_id: data.id,
+          });
+        }
       }
     }
 

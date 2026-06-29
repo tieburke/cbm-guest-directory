@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
+import { applyGuestNameSearch, rankGuestsBySimilarity } from "../utils/searchGuests";
 
 export default function DoorCheck() {
   const [events, setEvents] = useState([]);
@@ -40,18 +41,18 @@ export default function DoorCheck() {
   };
 
   const fetchGuests = async (value) => {
-    if (value.length < 2) {
+    if (value.trim().length < 2) {
       setGuests(allGuests);
       return;
     }
 
-    const { data } = await supabase
+    const baseQuery = supabase
       .from("guests")
       .select("*")
-      .or(`first_name.ilike.%${value}%,last_name.ilike.%${value}%,alias.ilike.%${value}%`)
       .limit(10);
+    const { data } = await applyGuestNameSearch(baseQuery, value);
 
-    const matchedGuests = data || [];
+    const matchedGuests = rankGuestsBySimilarity(data || [], value);
     if (!matchedGuests.length) {
       setGuests([]);
       return;
@@ -77,14 +78,10 @@ export default function DoorCheck() {
     const bannedIds = new Set((banData || []).map((ban) => ban.guest_id));
     const checkedInIds = new Set((checkInData || []).map((checkIn) => checkIn.guest_id));
 
+    // Preserve the relevance order from rankGuestsBySimilarity rather than re-sorting alphabetically
     const visibleGuests = matchedGuests
       .filter((g) => !bannedIds.has(g.id))
-      .map((g) => ({ ...g }))
-      .sort((a, b) => {
-        const nameA = [a.first_name, a.last_name].filter(Boolean).join(" ");
-        const nameB = [b.first_name, b.last_name].filter(Boolean).join(" ");
-        return nameA.localeCompare(nameB);
-      });
+      .map((g) => ({ ...g, isCheckedIn: checkedInIds.has(g.id) }));
 
     setGuests(visibleGuests);
   };
@@ -283,9 +280,19 @@ export default function DoorCheck() {
           autoFocus
         />
 
+        {/* Add Guest — always available, not just when search comes up empty */}
+        {!selected && (
+          <Link
+            to={`/guest/new?from=doorcheck&eventId=${selectedEvent.id}`}
+            className="mt-3 block w-full py-3 rounded-lg bg-green-700 text-white text-sm font-medium text-center hover:bg-green-600 transition"
+          >
+            + Add New Guest
+          </Link>
+        )}
+
         {/* Search results */}
         {guests.length > 0 && !selected && (
-          <div className="mt-2 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-3">
             {guests.map((g) => {
               const name = [g.first_name, g.last_name].filter(Boolean).join(" ");
               return (
@@ -318,16 +325,8 @@ export default function DoorCheck() {
           </div>
         )}
 
-        {search.length >= 2 && guests.length === 0 && !selected && (
-          <div className="mt-4 flex flex-col items-center gap-3">
-            <p className="text-gray-500 text-sm">No guests found.</p>
-            <Link
-              to="/guest/new?from=doorcheck"
-              className="w-full py-3 rounded-lg bg-green-700 text-white text-sm font-medium text-center hover:bg-green-600 transition"
-            >
-              + Add New Guest
-            </Link>
-          </div>
+        {search.trim().length >= 2 && guests.length === 0 && !selected && (
+          <p className="mt-4 text-gray-500 text-sm text-center">No guests found.</p>
         )}
 
         {/* Result */}

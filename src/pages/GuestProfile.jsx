@@ -61,11 +61,21 @@ export default function GuestProfile() {
   const [dailyBreadChecking, setDailyBreadChecking] = useState(false);
   const [dailyBreadCheckedIn, setDailyBreadCheckedIn] = useState(false);
   const [dailyBreadMessage, setDailyBreadMessage] = useState("");
+  const [reports, setReports] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [editingReportId, setEditingReportId] = useState(null);
+  const [editingReportNote, setEditingReportNote] = useState("");
+  const [savingReport, setSavingReport] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setCurrentUserId(user?.id ?? null));
+  }, []);
 
   useEffect(() => {
     fetchGuest();
     fetchBans();
+    fetchReports();
   }, [id]);
 
   useEffect(() => {
@@ -142,6 +152,54 @@ export default function GuestProfile() {
       .order("issued_date", { ascending: false });
     if (error) console.error("Error fetching bans:", error.message);
     else setBans(data);
+  };
+
+  const fetchReports = async () => {
+    const { data, error } = await supabase
+      .from("guest_reports")
+      .select(`*, staff:staff(*)`)
+      .eq("guest_id", id)
+      .order("created_at", { ascending: false });
+    if (error) console.error("Error fetching reports:", error.message);
+    else setReports(data || []);
+  };
+
+  const startEditingReport = (report) => {
+    setEditingReportId(report.id);
+    setEditingReportNote(report.note);
+  };
+
+  const cancelEditingReport = () => {
+    setEditingReportId(null);
+    setEditingReportNote("");
+  };
+
+  const handleSaveReportEdit = async (reportId) => {
+    if (!editingReportNote.trim()) return;
+    setSavingReport(true);
+    const { error } = await supabase
+      .from("guest_reports")
+      .update({ note: editingReportNote.trim() })
+      .eq("id", reportId);
+    if (error) {
+      console.error("Error updating report:", error.message);
+      alert("Could not save changes: " + error.message);
+    } else {
+      await fetchReports();
+      cancelEditingReport();
+    }
+    setSavingReport(false);
+  };
+
+  const handleDeleteReport = async (reportId) => {
+    if (!window.confirm("Delete this report? This cannot be undone.")) return;
+    const { error } = await supabase.from("guest_reports").delete().eq("id", reportId);
+    if (error) {
+      console.error("Error deleting report:", error.message);
+      alert("Could not delete report: " + error.message);
+    } else {
+      fetchReports();
+    }
   };
 
   const handleSave = async () => {
@@ -231,7 +289,20 @@ export default function GuestProfile() {
 
     console.log(`Deleted ${deletedCheckIns?.length ?? 0} check_ins`);
 
-    // 5. Finally delete the guest
+    // 5. Delete reports
+    const { error: reportsError } = await supabase
+      .from("guest_reports")
+      .delete()
+      .eq("guest_id", id);
+
+    if (reportsError) {
+      console.error("Error deleting reports:", reportsError);
+      alert("Delete failed: " + reportsError.message);
+      setDeleting(false);
+      return;
+    }
+
+    // 6. Finally delete the guest
     const { data, error } = await supabase
       .from("guests")
       .delete()
@@ -614,6 +685,76 @@ export default function GuestProfile() {
                       </p>
                     )}
                     {ban.notes && <p className="text-xs text-gray-500 italic mt-1">"{ban.notes}"</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Reports */}
+        <div className="bg-gray-800 rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Reports</h2>
+          {reports.length === 0 ? (
+            <p className="text-gray-400 text-sm">No reports for this guest.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {reports.map((report) => {
+                const author = report.staff;
+                const isOwnReport = currentUserId && report.staff_id === currentUserId;
+                const isEditing = editingReportId === report.id;
+                return (
+                  <div key={report.id} className="border-l-4 border-blue-700 pl-4">
+                    <div className="flex justify-between items-start gap-3">
+                      <p className="text-xs text-gray-400">
+                        {author ? `${author.first_name} ${author.last_name}` : "Unknown staff"}
+                        {" — "}
+                        {new Date(report.created_at).toLocaleDateString()}
+                      </p>
+                      {isOwnReport && !isEditing && (
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => startEditingReport(report)}
+                            className="text-xs text-gray-400 hover:text-white transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteReport(report.id)}
+                            className="text-xs text-red-400 hover:text-red-300 transition"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <div className="mt-2 flex flex-col gap-2">
+                        <textarea
+                          rows={3}
+                          value={editingReportNote}
+                          onChange={(e) => setEditingReportNote(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white text-sm focus:outline-none focus:border-gray-500 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={cancelEditingReport}
+                            className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSaveReportEdit(report.id)}
+                            disabled={savingReport}
+                            className="text-xs text-white px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 transition"
+                          >
+                            {savingReport ? "Saving..." : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{report.note}</p>
+                    )}
                   </div>
                 );
               })}
