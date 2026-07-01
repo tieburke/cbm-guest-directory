@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [allGuests, setAllGuests] = useState([]);
   const [guestsLoading, setGuestsLoading] = useState(false);
 
-  const [checkInFilter, setCheckInFilter] = useState("week");
+  const [checkInFilter, setCheckInFilter] = useState("day");
 
   const [demographics, setDemographics] = useState(null);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -378,7 +378,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => setShowReportModal(true)}
-            className="bg-yellow-400 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-yellow-500 transition"
+            className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             + New Report
           </button>
