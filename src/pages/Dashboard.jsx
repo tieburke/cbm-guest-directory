@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import BanCard from "../components/BanCard";
 import IssueBanModal from "../components/IssueBanModal";
-import IssueReportModal from "../components/IssueReportModal";
 import { useUserRole } from "../hooks/useUserRole";
 import { downloadCSV } from "../utils/exportCSV";
 import StaffCreateForm from "../components/StaffCreateForm";
@@ -107,46 +106,88 @@ export default function Dashboard() {
     setDemoLoading(false);
   };
 
+  // Supabase/PostgREST caps any single query at a max row count (1000 by
+  // default, set under Project Settings > API > "Max Rows"). Queries that
+  // would return more rows than that get silently truncated -- no error is
+  // thrown, so it just looks like there are only 1000 check-ins. To get
+  // everything, we page through the table in batches using .range() and
+  // keep going until a page comes back shorter than the page size.
+  const CHECKIN_PAGE_SIZE = 1000;
+
   const fetchCheckIns = async (filter = checkInFilter) => {
     setCheckInsLoading(true);
 
-    let query = supabase
-      .from("check_ins")
-      .select(`
-        *,
-        guest:guests(*),
-        event:events(*),
-        staff:staff(*)
-      `)
-      .order("checked_in_at", { ascending: false });
-
     const now = new Date();
+    let startIso = null;
 
     if (filter === "day") {
       const start = new Date(now);
       start.setHours(0, 0, 0, 0);
-      query = query.gte("checked_in_at", start.toISOString());
+      startIso = start.toISOString();
     } else if (filter === "week") {
       const start = new Date(now);
       start.setDate(now.getDate() - 7);
       start.setHours(0, 0, 0, 0);
-      query = query.gte("checked_in_at", start.toISOString());
+      startIso = start.toISOString();
     } else if (filter === "month") {
       const start = new Date(now);
       start.setMonth(now.getMonth() - 1);
       start.setHours(0, 0, 0, 0);
-      query = query.gte("checked_in_at", start.toISOString());
+      startIso = start.toISOString();
     } else if (filter === "year") {
       const start = new Date(now);
       start.setFullYear(now.getFullYear() - 1);
       start.setHours(0, 0, 0, 0);
-      query = query.gte("checked_in_at", start.toISOString());
+      startIso = start.toISOString();
     }
-    // "all" — no filter applied
+    // "all" — no date filter applied
 
-    const { data, error } = await query;
-    if (error) console.error("Error fetching check-ins:", error.message);
-    else setCheckIns(data);
+    let allRows = [];
+    let from = 0;
+    let keepGoing = true;
+    let fetchError = null;
+
+    while (keepGoing) {
+      let query = supabase
+        .from("check_ins")
+        .select(`
+          *,
+          guest:guests(*),
+          event:events(*),
+          staff:staff(*)
+        `)
+        .order("checked_in_at", { ascending: false })
+        .range(from, from + CHECKIN_PAGE_SIZE - 1);
+
+      if (startIso) query = query.gte("checked_in_at", startIso);
+
+      const { data, error } = await query;
+
+      if (error) {
+        fetchError = error;
+        keepGoing = false;
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        keepGoing = false;
+        break;
+      }
+
+      allRows = allRows.concat(data);
+
+      if (data.length < CHECKIN_PAGE_SIZE) {
+        keepGoing = false; // last page
+      } else {
+        from += CHECKIN_PAGE_SIZE;
+      }
+    }
+
+    if (fetchError) {
+      console.error("Error fetching check-ins:", fetchError.message);
+    } else {
+      setCheckIns(allRows);
+    }
     setCheckInsLoading(false);
   };
 
@@ -362,7 +403,7 @@ export default function Dashboard() {
       <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
 
         {/* Quick Actions */}
-        <div className="mb-8 flex gap-2 items-center">
+        <div className="mb-8 flex gap-2 items-center flex-wrap">
           <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mr-2">Quick Actions:</p>
           <Link to="/door-check" className="bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-600 transition">
             Door Check
@@ -378,7 +419,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => setShowReportModal(true)}
-            className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+            className="bg-yellow-400 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-yellow-500 transition"
           >
             + New Report
           </button>
@@ -638,6 +679,7 @@ export default function Dashboard() {
             )}
           </div>
         )}
+
 
         {/* Staff tab */}
         {activeTab === "staff" && (
