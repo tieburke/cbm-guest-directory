@@ -78,10 +78,11 @@ export default function DoorCheck() {
     const bannedIds = new Set((banData || []).map((ban) => ban.guest_id));
     const checkedInIds = new Set((checkInData || []).map((checkIn) => checkIn.guest_id));
 
-    // Preserve the relevance order from rankGuestsBySimilarity rather than re-sorting alphabetically
+    // Preserve the relevance order from rankGuestsBySimilarity rather than re-sorting alphabetically.
+    // Banned guests are tagged (not filtered out) so staff can still find and select them --
+    // selecting one routes to the BANNED screen via handleSelect's own ban lookup.
     const visibleGuests = matchedGuests
-      .filter((g) => !bannedIds.has(g.id))
-      .map((g) => ({ ...g, isCheckedIn: checkedInIds.has(g.id) }));
+      .map((g) => ({ ...g, isBanned: bannedIds.has(g.id), isCheckedIn: checkedInIds.has(g.id) }));
 
     setGuests(visibleGuests);
   };
