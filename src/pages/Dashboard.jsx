@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import BanCard from "../components/BanCard";
 import IssueBanModal from "../components/IssueBanModal";
+import IssueReportModal from "../components/IssueReportModal";
 import { useUserRole } from "../hooks/useUserRole";
 import { downloadCSV } from "../utils/exportCSV";
 import StaffCreateForm from "../components/StaffCreateForm";
@@ -99,10 +100,50 @@ export default function Dashboard() {
     setGuestsLoading(false);
   };
 
+  // Same Supabase/PostgREST 1000-row cap as check-ins (see note below) --
+  // page through the guests table so demographics reflects every guest,
+  // not just the first 1000.
+  const DEMOGRAPHICS_PAGE_SIZE = 1000;
+
   const fetchDemographics = async () => {
     setDemoLoading(true);
-    const { data } = await supabase.from("guests").select("*");
-    if (data) setDemographics(data);
+
+    let allRows = [];
+    let from = 0;
+    let keepGoing = true;
+    let fetchError = null;
+
+    while (keepGoing) {
+      const { data, error } = await supabase
+        .from("guests")
+        .select("*")
+        .range(from, from + DEMOGRAPHICS_PAGE_SIZE - 1);
+
+      if (error) {
+        fetchError = error;
+        keepGoing = false;
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        keepGoing = false;
+        break;
+      }
+
+      allRows = allRows.concat(data);
+
+      if (data.length < DEMOGRAPHICS_PAGE_SIZE) {
+        keepGoing = false; // last page
+      } else {
+        from += DEMOGRAPHICS_PAGE_SIZE;
+      }
+    }
+
+    if (fetchError) {
+      console.error("Error fetching demographics:", fetchError.message);
+    } else {
+      setDemographics(allRows);
+    }
     setDemoLoading(false);
   };
 
@@ -679,7 +720,6 @@ export default function Dashboard() {
             )}
           </div>
         )}
-
 
         {/* Staff tab */}
         {activeTab === "staff" && (
